@@ -2,9 +2,13 @@ import torch
 import torch.nn as nn
 
 class Diffusion:
-    def __init__(self, model: nn.Module, time_steps: int = 1000, beta_start: float = 0.0001, beta_end: float = 0.02, image_size: int = 32):
+    def __init__(self, model: nn.Module, time_steps: int = 1000, beta_start: float = 0.0001, beta_end: float = 0.02, image_size: int = 32, device = bool):
         
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if device:
+            self.device = torch.device('cuda')
+        else:
+            self.device = torch.device('cpu')
+            
         self.model = model
         self.time_steps = time_steps
         self.beta_start = beta_start
@@ -14,6 +18,11 @@ class Diffusion:
         self.beta = (torch.linspace(self.beta_start, self.beta_end, self.time_steps)).to(self.device)
         self.alpha = 1.0 - self.beta
         self.alpha_bar = torch.cumprod(self.alpha, dim = 0)
+    
+    def sample_timesteps(self, n: int):
+        # n = batch_size
+        t = torch.randint(low = 1, high = self.time_steps, size = (n,)) # Uniform Distribution
+        return t.to(self.device)
 
     def add_noise(self, x0: torch.Tensor, t: torch.Tensor):
         ''' Forward process....Samples from q(x_t | x_0)
@@ -21,9 +30,10 @@ class Diffusion:
              t: [batch_size]
         '''
         ϵ = torch.randn_like(x0).to(self.device)
-        sqrt_alpha_bar = torch.sqrt(self.alpha_bar[t])                                                      # TODO: Check Dimension
+        sqrt_alpha_bar = torch.sqrt(self.alpha_bar[t])[:,None,None,None]                                                      # TODO: Check Dimension
         mean = sqrt_alpha_bar * x0
-        var = (torch.sqrt(1-self.alpha_bar[t])) * ϵ
+        var_arg = torch.sqrt(1-self.alpha_bar[t])[:,None,None,None]
+        var = var_arg * ϵ
         
         return mean + var, ϵ
     
@@ -56,17 +66,3 @@ class Diffusion:
         x = (x*255.0).type(torch.uint8)
 
         return x
-
-'''
-
-device = torch.device('cuda')
-img = torch.rand(10,3,8,8).to(device)
-t = torch.randint(1,100,(1,)).to(device)
-
-from unet import UNet
-net = UNet().to(device)
-diff = Diffusion(model = net)
-res = diff.sample_img(1)
-res = res[0].permute(1,2,0)
-
-'''
